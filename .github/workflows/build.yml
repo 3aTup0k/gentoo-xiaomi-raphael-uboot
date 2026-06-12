@@ -1,0 +1,102 @@
+name: Build Gentoo (OpenRC) for Raphael
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: 'Kernel version'
+        required: true
+        type: choice
+        options:
+          - '7.0'
+          - '6.18'
+        default: '7.0'
+      kernel_repository:
+        description: 'Kernel deb repository'
+        required: false
+        default: 'GengWei1997/kernel-deb'
+        type: string
+      stage3_url:
+        description: 'Stage3 URL (empty = latest arm64 OpenRC)'
+        required: false
+        default: ''
+        type: string
+
+env:
+  HOSTNAME: xiaomi-raphael
+  BOOT_IMG: xiaomi-k20pro-boot.img
+
+permissions:
+  contents: write
+
+jobs:
+  build-gentoo:
+    runs-on: ubuntu-24.04-arm
+    name: gentoo-raphael
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            curl wget xz-utils binutils \
+            e2fsprogs 7zip
+
+      - name: Check disk space
+        run: df -h /
+
+      - name: Download kernel debs + boot.img
+        run: |
+          KV="${{ github.event.inputs.kernel_version || '7.0' }}"
+          KR="${{ github.event.inputs.kernel_repository || 'GengWei1997/kernel-deb' }}"
+          mkdir -p "xiaomi-raphael-debs_${KV}"
+
+          for f in linux-image linux-headers firmware; do
+            curl -sL -o "xiaomi-raphael-debs_${KV}/${f}-xiaomi-raphael.deb" \
+              "https://github.com/${KR}/releases/download/kernel-v${KV}/${f}-xiaomi-raphael.deb" &
+          done
+
+          curl -sL -o xiaomi-k20pro-boot.img \
+            "https://github.com/GengWei1997/kernel-deb/releases/download/v1.0.0/xiaomi-k20pro-boot.img" &
+
+          wait
+          ls -lh xiaomi-raphael-debs_${KV}/
+          ls -lh xiaomi-k20pro-boot.img
+
+      - name: Build Gentoo image
+        run: |
+          chmod +x build.sh scripts/*.sh
+          KV="${{ github.event.inputs.kernel_version || '7.0' }}"
+
+          sudo \
+            KERNEL_VERSION="$KV" \
+            GENTOO_STAGE3_URL="${{ github.event.inputs.stage3_url }}" \
+            ./build.sh gentoo-server "$KV"
+
+      - name: Generate checksums
+        run: |
+          sha256sum rootfs.img xiaomi-k20pro-boot.img > gentoo-raphael.sha256
+          cat gentoo-raphael.sha256
+          ls -lh rootfs.img
+
+      - name: Compress
+        run: |
+          7z a -mx=5 gentoo-raphael.7z rootfs.img xiaomi-k20pro-boot.img
+          ls -lh gentoo-raphael.7z
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gentoo-raphael-openrc
+          path: |
+            gentoo-raphael.7z
+            gentoo-raphael.sha256
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sudo rm -rf rootdir 2>/dev/null || true
+          rm -f rootfs.img xiaomi-k20pro-boot.img 2>/dev/null || true
+          rm -rf xiaomi-raphael-debs_* gentoo-raphael.7z 2>/dev/null || true
