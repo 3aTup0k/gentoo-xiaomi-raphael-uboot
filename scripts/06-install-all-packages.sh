@@ -32,6 +32,9 @@ chroot rootdir emerge --getbinpkg --usepkgonly --binpkg-respect-use=n $PACKAGES 
     chroot rootdir emerge --getbinpkg --binpkg-respect-use=n $PACKAGES 2>&1
 }
 
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] [06]   Cleaning portage temp..."
+chroot rootdir rm -rf /var/tmp/portage/* /var/cache/distfiles/* 2>/dev/null || true
+
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] [06]   Enabling services..."
 chroot rootdir rc-update add sshd default
 chroot rootdir rc-update add dhcpcd default
