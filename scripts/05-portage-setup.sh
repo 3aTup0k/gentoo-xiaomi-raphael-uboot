@@ -24,7 +24,8 @@ sync-uri = rsync://rsync.gentoo.org/gentoo-portage
 auto-sync = yes
 EOF
 
-cat > rootdir/etc/portage/binrepos.conf << 'EOF'
+mkdir -p rootdir/etc/portage/binrepos.conf
+cat > rootdir/etc/portage/binrepos.conf/gentoobinhost.conf << 'EOF'
 [gentoobinhost]
 priority = 9999
 sync-uri = https://distfiles.gentoo.org/releases/arm64/binpackages/23.0/arm64
